@@ -1,5 +1,5 @@
 param(
-  [Parameter(Mandatory)][ValidateSet('0.2.2-rc.3','0.2.3-alpha.2')][string]$Version,
+  [Parameter(Mandatory)][ValidateSet('0.2.2-rc.3','0.2.2-rc.4','0.2.2-rc.5','0.2.3-alpha.1','0.2.3-alpha.2')][string]$Version,
   [Parameter(Mandatory)][string]$Runtime,
   [Parameter(Mandatory)][string]$HomeDirectory,
   [string]$NodeExecutable = 'node',

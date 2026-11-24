@@ -5,7 +5,7 @@ import { createAssistantMessage, createSystemMessage } from '@deepseek-ai/dsh-ll
 import { defineTool } from '@deepseek-ai/dsh-tools';
 
 export const hostServices = ['agents', 'sessions', 'systemPrompt', 'tools', 'webServer', 'connection'];
-export const supportedHosts = ['0.2.2-rc.3', '0.2.3-alpha.2'];
+export const supportedHosts = ['0.2.2-rc.3', '0.2.2-rc.4', '0.2.2-rc.5', '0.2.3-alpha.1', '0.2.3-alpha.2'];
 const greetingSource = { provider: 'dsh-quyubagu', model: 'greeting' };
 
 export function isGreetingMessage(event) {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-roleplay",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "icon": "./icon.png",
   "description": "DSH 人设卡、去八股和本地梗百科",
   "type": "module",
@@ -9,8 +9,8 @@
   "bugs": { "url": "https://github.com/yangzhuocode-cloud/dsh-roleplay/issues" },
   "keywords": ["dsh-plugin", "roleplay", "deepseek-harness"],
   "license": "MIT",
-  "peerDependencies": { "@deepseek-ai/cordis": "~4.1.0 || ~4.2.0-alpha.1", "@deepseek-ai/dsh-llm": "0.2.2-rc.3 || 0.2.3-alpha.2", "@deepseek-ai/dsh-tools": "0.2.2-rc.3 || 0.2.3-alpha.2" },
-  "engines": { "node": ">=24.9.0", "dsh": "0.2.2-rc.3 || 0.2.3-alpha.2" },
+  "peerDependencies": { "@deepseek-ai/cordis": "~4.1.0 || ~4.2.0-alpha.1", "@deepseek-ai/dsh-llm": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5 || 0.2.3-alpha.1 || 0.2.3-alpha.2", "@deepseek-ai/dsh-tools": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5 || 0.2.3-alpha.1 || 0.2.3-alpha.2" },
+  "engines": { "node": ">=24.9.0", "dsh": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5 || 0.2.3-alpha.1 || 0.2.3-alpha.2" },
   "exports": { ".": "./index.js", "./client": "./client.js", "./package.json": "./package.json" },
   "files": ["LICENSE","THIRD_PARTY_NOTICES.txt","icon.png","index.js","core.js","builtin-cards.js","avatars","client.js","cordis.patch.yml","README.md","tone-preview.js","glossary.js","vendor","compat","docs"],
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web", "inject": [] } },
