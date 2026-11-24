@@ -1,0 +1,8 @@
+Third-party components
+
+This package includes modified MIT-licensed code from:
+- dsh-fish-tone, source commit b22b071; see vendor/fish-tone/LICENSE.
+- dsh-memewiki, source commit 588ec31; see vendor/memewiki/LICENSE.
+
+The root MIT license does not replace these copyright notices.
+Community meme databases are not bundled with this package.
