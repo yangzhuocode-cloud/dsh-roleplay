@@ -10,7 +10,9 @@
 
 ## 安装
 
-本地实测：DSH 0.2.2-rc.3、Node.js 24。其他 DSH 版本尚未验证；当前安装包的兼容声明限定为 DSH 0.2.2-rc.3。Node.js 要求为 24 或更高版本。
+兼容 DSH **0.2.2-rc.3** 和 **0.2.3-alpha.2**，均已通过隔离 Web 与 Windows 桌面测试。其他宿主版本暂未声明支持。
+
+Node.js 要求随宿主选择：rc.3 为 ≥24.9.0；alpha.2 为 `^24.22.3 || >=26.13.1`。桌面版使用其自带的运行时。
 
 桌面版安装：
 
@@ -58,6 +60,8 @@ github:yangzhuocode-cloud/dsh-roleplay
 npm run check
 npm test
 ```
+
+版本适配入口和本地多版本测试方法见 [兼容适配与测试](./docs/兼容适配与测试.md)。
 
 ## 许可
 

@@ -1,0 +1,20 @@
+import { spawn } from 'node:child_process';
+import { mkdir, writeFile, appendFile } from 'node:fs/promises';
+const [exe, home, userData, evidence, port='19478'] = process.argv.slice(2);
+if (![exe,home,userData,evidence].every(Boolean)) throw Error('Explicit isolated paths required');
+await mkdir(userData,{recursive:true});await mkdir(evidence,{recursive:true});
+const env={...process.env,DSH_HOME:home,DSH_TELEMETRY_DISABLED:'1',DSH_DESKTOP_OPEN_DEVTOOLS:'0'};delete env.ELECTRON_RUN_AS_NODE;
+const child=spawn(exe,['--inspect-brk=127.0.0.1:0',`--remote-debugging-port=${port}`,`--user-data-dir=${userData}`],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+let output='';let found;const endpoint=new Promise(r=>found=r);
+const log=b=>{const text=b.toString();output+=text;appendFile(evidence+'/desktop.log',text);const match=output.match(/Debugger listening on (ws:\/\/[^\s]+)/);if(match)found(match[1]);};child.stdout.on('data',log);child.stderr.on('data',log);
+const url=await Promise.race([endpoint,new Promise((_,rej)=>setTimeout(()=>rej(Error('Inspector timeout')),30000))]);
+const ws=new WebSocket(url);await new Promise(r=>ws.onopen=r);let id=0;const pending=new Map();let onPaused;const paused=new Promise(r=>onPaused=r);
+function send(method,params={}){return new Promise(r=>{const i=++id;pending.set(i,r);ws.send(JSON.stringify({id:i,method,params}));});}
+ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id){pending.get(m.id)?.(m);pending.delete(m.id);}if(m.method==='Debugger.paused')onPaused(m.params);};
+await send('Debugger.enable');await send('Runtime.runIfWaitingForDebugger');const stop=await paused;
+const expression=`(()=>{const app=process.getBuiltinModule('module').createRequire(process.resourcesPath+'/app.asar/package.json')('electron').app;app.setPath('userData',${JSON.stringify(userData)});app.setPath('sessionData',${JSON.stringify(userData)});return {userData:app.getPath('userData'),home:process.env.DSH_HOME,version:app.getVersion()}})()`;
+const result=await send('Debugger.evaluateOnCallFrame',{callFrameId:stop.callFrames[0].callFrameId,expression,returnByValue:true});
+if(result.result?.exceptionDetails||result.error)throw Error(JSON.stringify(result));
+await writeFile(evidence+'/launch.json',JSON.stringify({pid:child.pid,...result.result.result.value},null,2));console.log(JSON.stringify(result.result.result.value));
+await send('Debugger.resume');ws.close();console.log('Isolated desktop resumed');
+await new Promise(r=>child.on('exit',r));

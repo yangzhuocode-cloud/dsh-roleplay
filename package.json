@@ -1,6 +1,6 @@
 {
   "name": "dsh-roleplay",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "icon": "./icon.png",
   "description": "DSH 人设卡、去八股和本地梗百科",
   "type": "module",
@@ -9,10 +9,10 @@
   "bugs": { "url": "https://github.com/yangzhuocode-cloud/dsh-roleplay/issues" },
   "keywords": ["dsh-plugin", "roleplay", "deepseek-harness"],
   "license": "MIT",
-  "peerDependencies": { "@deepseek-ai/cordis": "~4.1.0", "@deepseek-ai/dsh-llm": "0.2.2-rc.3", "@deepseek-ai/dsh-tools": "0.2.2-rc.3" },
-  "engines": { "node": ">=24", "dsh": "0.2.2-rc.3" },
+  "peerDependencies": { "@deepseek-ai/cordis": "~4.1.0 || ~4.2.0-alpha.1", "@deepseek-ai/dsh-llm": "0.2.2-rc.3 || 0.2.3-alpha.2", "@deepseek-ai/dsh-tools": "0.2.2-rc.3 || 0.2.3-alpha.2" },
+  "engines": { "node": ">=24.9.0", "dsh": "0.2.2-rc.3 || 0.2.3-alpha.2" },
   "exports": { ".": "./index.js", "./client": "./client.js", "./package.json": "./package.json" },
-  "files": ["LICENSE","THIRD_PARTY_NOTICES.txt","icon.png","index.js","core.js","builtin-cards.js","avatars","client.js","cordis.patch.yml","README.md","tone-preview.js","glossary.js","vendor"],
+  "files": ["LICENSE","THIRD_PARTY_NOTICES.txt","icon.png","index.js","core.js","builtin-cards.js","avatars","client.js","cordis.patch.yml","README.md","tone-preview.js","glossary.js","vendor","compat","docs"],
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "platform": "web", "inject": [] } },
-  "scripts": { "test": "node --test", "check": "node --check core.js && node --check builtin-cards.js && node --check index.js && node --check client.js && node --check tone-preview.js && node --check glossary.js && node --check vendor/fish-tone/tone.js && node --check vendor/memewiki/lookup.js" }
+  "scripts": { "test": "node --test", "check": "node --check core.js && node --check builtin-cards.js && node --check index.js && node --check client.js && node --check tone-preview.js && node --check glossary.js && node --check vendor/fish-tone/tone.js && node --check vendor/memewiki/lookup.js && node --check compat/dsh.js && node --check compat/routes.js && node --check scripts/verify-host.mjs && node --check scripts/launch-desktop.mjs && node --check browser-check.mjs" }
 }

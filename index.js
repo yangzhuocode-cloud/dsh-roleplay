@@ -1,11 +1,9 @@
+import { createHostAdapter, hostServices } from './compat/dsh.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { symbols } from '@deepseek-ai/cordis';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { createAssistantMessage, createSystemMessage } from '@deepseek-ai/dsh-llm';
-import { defineTool } from '@deepseek-ai/dsh-tools';
 import {
   InputError, buildTurn, cardGreeting, cardList, deleteCard, exportCard, getCard, importCard,
   defaultCard, inheritSession, lockDefaultCard, newState, normalizeTerm, saveCard,
@@ -15,16 +13,9 @@ import { openGlossary } from './glossary.js';
 import { previewLevels, previewTone } from './tone-preview.js';
 
 export const name = 'quyubagu';
-export const inject = ['agents', 'sessions', 'systemPrompt', 'tools', 'webServer', 'connection'];
+export const inject = hostServices;
 const api = '/api/quyubagu';
 const maxBody = 8 * 1024 * 1024;
-const greetingSource = { provider: 'dsh-quyubagu', model: 'greeting' };
-
-function isGreetingMessage(event) {
-  const source = event.type === 'assistant/message' && event.data.message.source;
-  return source?.provider === greetingSource.provider && source?.model === greetingSource.model;
-}
-
 function respond(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(value));
@@ -43,21 +34,8 @@ async function bodyOf(req) {
   catch { throw new InputError('JSON 格式不正确'); }
 }
 
-function textOf(message) {
-  const content = message?.content;
-  return Array.isArray(content) ? content.filter(block => block.type === 'text').map(block => block.text).join('\n') : '';
-}
-
-function isUserMessage(message) {
-  return message?.role === 'user' && message.source?.kind === 'user';
-}
-
-function lastUserText(session) {
-  return textOf(session.snapshotEvents().findLast(event => event.type === 'user/message' &&
-    isUserMessage(event.data))?.data);
-}
-
 export function apply(ctx) {
+  const host = createHostAdapter(ctx);
   const folder = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'quyubagu');
   const stateFile = join(folder, 'state.json');
   mkdirSync(folder, { recursive: true });
@@ -88,21 +66,16 @@ export function apply(ctx) {
   function ensure(session) {
     if (Object.hasOwn(state.sessions, session.id)) return state.sessions[session.id];
     return change(next => {
-      const fork = session.header.isSeeded && forkContext.getStore();
+      const fork = host.sessionMetadata(session).isSeeded && forkContext.getStore();
       if (fork?.active && !fork.childId) {
         fork.childId = session.id;
         next.sessions[session.id] = structuredClone(fork.binding);
         return next.sessions[session.id];
       }
-      if (inheritSession(next, session.id, session.header.parentSession)) return next.sessions[session.id];
+      if (inheritSession(next, session.id, host.sessionMetadata(session).parentSession)) return next.sessions[session.id];
       next.sessions[session.id] = { cardId: null, revision: null, greetingIndex: 0, settings: { ...next.defaults } };
       return next.sessions[session.id];
     });
-  }
-
-  function isStarted(session) {
-    return session.snapshotEvents().some(event => event.type === 'turn/start' || event.type === 'user/message')
-      || session.surface.nodes.length > 0;
   }
 
   function bindingForTurn(session) {
@@ -124,57 +97,27 @@ export function apply(ctx) {
   }
 
   async function openWithGreeting(session) {
-    if (isStarted(session) || session.header.isSeeded || session.header.parentSession) return;
+    if (host.isStarted(session) || host.sessionMetadata(session).isSeeded || host.sessionMetadata(session).parentSession) return;
     const binding = prepareBlank(session);
     const card = binding.useDefaultCard ? defaultCard(state) : sessionCard(state, binding);
     const greetingIndex = binding.useDefaultCard ? card?.scene.greetingIndex ?? 0 : binding.greetingIndex;
     const text = cardGreeting(card, greetingIndex);
     if (!text) return;
 
-    const agent = ctx.agents.get(session.id);
-    if (!agent || agent.phase?.kind !== 'idle') return;
-    await agent.runMaintenance(async () => {
-      const phase = agent.phase;
-      if (phase.kind !== 'maintenance' || phase.lastTurn !== 0 || isStarted(session)) return;
-
-      bindingForTurn(session);
-      const step = { turn: 1, step: 1 };
-      const append = { surfaceOp: 'append' };
-      session.append('turn/start', { turn: 1 });
-      session.append('step/start', step);
-      session.append('system/message', { ...step, message: createSystemMessage('') }, append);
-      session.append('assistant/message', {
-        ...step, message: createAssistantMessage({ content: [{ type: 'text', text }], source: greetingSource }), stream: [],
-      }, append);
-      session.append('step/end', step);
-      session.append('turn/end', { turn: 1, reason: { kind: 'completed' } });
-      phase.lastTurn = 1;
-    });
+    await host.writeGreeting(session, text, () => bindingForTurn(session));
   }
 
-  // Native create can reuse an empty draft. Restoring a started session never applies the default.
-  // DSH's native fork omits parentSession, so pass its originating binding within the fork call.
-  ctx.inject(['sessionController'], scope => {
-    const proxy = scope.get('sessionController');
-    const controller = proxy[symbols.original] ?? proxy;
-    const create = controller.create;
-    const begin = async function (request) {
-      const result = await create.call(this, request);
-      const session = ctx.sessions.get(result.sessionId);
-      if (session) await openWithGreeting(session);
-      return result;
-    };
-    if (typeof create === 'function') controller.create = begin;
-
-    const forkSession = controller.fork;
-    const forkWithBinding = async function (request) {
-      if (!request || !Object.hasOwn(state.sessions, request.sessionId)) return forkSession.call(this, request);
+  // Card bindings belong to the plugin; host controller wrapping belongs to the adapter.
+  host.wrapController({
+    created: openWithGreeting,
+    fork: async (request, run) => {
+      if (!request || !Object.hasOwn(state.sessions, request.sessionId)) return run(request);
       const binding = structuredClone(state.sessions[request.sessionId]);
       delete binding.useDefaultCard;
       const fork = { active: true, binding };
       return forkContext.run(fork, async () => {
         try {
-          const result = await forkSession.call(this, request);
+          const result = await run(request);
           if (result.sessionId && fork.childId !== result.sessionId) {
             change(next => next.sessions[result.sessionId] = fork.binding);
           }
@@ -183,17 +126,12 @@ export function apply(ctx) {
           fork.active = false;
         }
       });
-    };
-    if (typeof forkSession === 'function') controller.fork = forkWithBinding;
-    scope.effect(() => () => {
-      if (controller.create === begin) controller.create = create;
-      if (controller.fork === forkWithBinding) controller.fork = forkSession;
-    }, '角色扮演新会话与会话分支');
+    },
   });
-  ctx.on('session/created', session => {
+  host.onSessionCreated(session => {
     if (session?.id) ensure(session);
   });
-  ctx.on('session/event', (session, event) => {
+  host.onSessionEvent((session, event) => {
     if (event.type === 'turn/start') turns.set(session.id, { turn: event.data.turn, ...bindingForTurn(session) });
     if (event.type === 'turn/end') {
       turns.delete(session.id);
@@ -201,13 +139,12 @@ export function apply(ctx) {
     }
   });
   // Claimed messages are available before DSH assembles the request, unlike pre-step.
-  ctx.on('agent/inbox/claimed', ({ agent, message, turn }) => {
-    if (!isUserMessage(message)) return;
+  host.onUserMessage(({ agent, text, turn }) => {
     if (turns.get(agent.id)?.turn !== turn) turns.set(agent.id, { ...bindingForTurn(agent.session), turn });
-    incoming.set(agent.id, textOf(message));
+    incoming.set(agent.id, text);
   });
 
-  ctx.systemPrompt.context({
+  host.registerPrompt({
     name: 'quyubagu:current-turn',
     order: 940,
     interpolate: false,
@@ -217,8 +154,8 @@ export function apply(ctx) {
       const binding = turns.get(agent.id) ?? bindingForTurn(agent.session);
       const previous = turns.get(agent.id);
       const result = previous?.prepared ?? buildTurn(sessionCard(state, binding), binding, binding.settings,
-        incoming.get(agent.id) || lastUserText(agent.session), [], {
-          greetingInHistory: agent.session.snapshotEvents().some(isGreetingMessage),
+        incoming.get(agent.id) || host.lastUserText(agent.session), [], {
+          greetingInHistory: host.hasGreeting(agent.session),
           prefetch: text => glossary.prefetch(Object.values(state.terms), text),
         });
       if (previous) previous.prepared = result;
@@ -231,7 +168,7 @@ export function apply(ctx) {
     return Boolean(id && (turns.get(id) ?? state.sessions[id])?.settings.memes);
   }
 
-  ctx.tools.register(defineTool({
+  host.registerTool({
     name: 'quyubagu_lookup_meme',
     description: '在本地自定义及社区词库中查询网络梗、缩写和黑话。查不到时说明本地词库未收录。',
     parameters: { query: { type: 'string', required: true, description: '梗名' } },
@@ -241,9 +178,9 @@ export function apply(ctx) {
       const term = glossary.search(Object.values(state.terms), query);
       return term ? JSON.stringify(term) : '本地词库没有找到这个梗。';
     },
-  }), { when: lookupEnabled });
+  }, lookupEnabled);
 
-  ctx.webServer.register({
+  host.registerRoute({
     kind: 'prefix',
     path: api,
     handler: async (req, res) => {
@@ -251,8 +188,7 @@ export function apply(ctx) {
         return respond(res, 403, { error: '仅限 DSH 插件页面访问' });
       }
       // Apply DSH's authenticated connection boundary to this plugin-owned HTTP route.
-      const rejection = typeof ctx.connection.requestRejection === 'function'
-        ? ctx.connection.requestRejection(req) : 403;
+      const rejection = host.requestRejection(req);
       if (rejection) return respond(res, rejection, { error: '请在已连接的 DSH 中打开插件' });
       try {
         const url = new URL(req.url ?? '/', 'http://localhost');

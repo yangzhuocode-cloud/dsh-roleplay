@@ -9,10 +9,14 @@ const root = resolve(testFolder);
 const dir = pathToFileURL(root + '/');
 const requireBrowser = createRequire(process.env.QYB_BROWSER_TOOLS || join(root, 'browser-tools', 'package.json'));
 const { chromium } = requireBrowser('playwright-core');
-const log = await readFile(new URL('web-fixture.log', dir), 'utf8');
+const desktop = Boolean(process.env.DSH_TEST_CDP);
+const log = await readFile(new URL(desktop ? 'desktop.log' : 'web-fixture.log', dir), 'utf8');
 const url = log.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+/)?.[0];
-const browser = await chromium.launch({ executablePath: process.env.DSH_TEST_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, locale: 'zh-CN', acceptDownloads: true });
+const browser = desktop ? await chromium.connectOverCDP(process.env.DSH_TEST_CDP)
+  : await chromium.launch({ executablePath: process.env.DSH_TEST_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const page = desktop ? browser.contexts().flatMap(context => context.pages()).find(page => page.url().startsWith('dsh-app://app/'))
+  : await browser.newPage({ viewport: { width: 1440, height: 1000 }, locale: 'zh-CN', acceptDownloads: true });
+assert.ok(page, 'DSH application page is required');
 page.setDefaultTimeout(8000);
 const issues=[];
 page.on('pageerror', e => issues.push(e.message));
@@ -82,11 +86,13 @@ const newChat = async () => {
   await page.getByText('新会话', { exact: true }).first().click();
 };
 try {
+  if (!desktop) {
   const unauthenticated = await fetch(new URL('/api/quyubagu/library', url), {
     headers: { 'x-quyubagu': '1' },
   });
   assert.equal(unauthenticated.status, 401);
   await page.goto(url, { wait_until: 'domcontentloaded', timeout: 30000 });
+  }
   await button('账号菜单').waitFor({ timeout: 30000 });
   if (await button('继续').isVisible()) await button('继续').click();
   await openSettings();
